@@ -423,7 +423,7 @@ public class MDSInterface2 {
 			answersJson = cursor.getString(2);
 			finished = cursor.getInt(3) != 0;
 			savedProcedureGUID = cursor.getString(cursor.getColumnIndex(Encounters.Contract.UUID));
-			savedProcedureUploaded = cursor.getInt(5) != 0;
+			savedProcedureUploaded = true; //cursor.getInt(5) != 0;
 			observerUUID = cursor.getString(
 				cursor.getColumnIndex(Encounters.Contract.OBSERVER));
 			subjectUUID = cursor.getString(
@@ -613,6 +613,10 @@ public class MDSInterface2 {
 		}
 		Log.i(TAG, "Posted responses, now sending " + totalBinaries
 				+ " binaries.");
+
+        // HARD-CODE
+        savedProcedureGUID = "eccaf997-1abc-486c-91f2-9f2174579818";
+
 		// lookup starting packet size
 		int newPacketSize;
 		try {
