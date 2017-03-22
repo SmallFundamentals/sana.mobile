@@ -3,7 +3,9 @@
  */
 package org.sana.android.net;
 
+import java.io.BufferedInputStream;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -11,6 +13,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -54,6 +57,7 @@ import org.json.JSONTokener;
 import org.sana.R;
 import org.sana.android.Constants;
 import org.sana.android.content.Uris;
+import org.sana.android.db.ChecksumResultsDAO;
 import org.sana.android.db.ModelWrapper;
 import org.sana.android.db.SanaDB.BinarySQLFormat;
 import org.sana.android.db.SanaDB.ImageSQLFormat;
@@ -69,6 +73,8 @@ import org.sana.android.provider.Subjects;
 import org.sana.android.service.QueueManager;
 import org.sana.android.service.impl.DispatchService;
 import org.sana.android.util.Dates;
+import org.sana.android.util.NetworkUtil;
+import org.sana.android.util.RsyncAnalyser;
 import org.sana.core.Patient;
 import org.sana.net.MDSResult;
 import org.sana.net.Response;
@@ -385,7 +391,7 @@ public class MDSInterface2 {
 		Encounters.Contract.SUBJECT,
 		Encounters.Contract.OBSERVER};
 
-	public static boolean postProcedureToDjangoServer(Uri uri, Context context, String user, String password) throws UnsupportedEncodingException {
+	public static boolean postProcedureToDjangoServer(Uri uri, Context context, String user, String password) throws IOException, NoSuchAlgorithmException {
 		Log.i(TAG, "In Post procedure to Django server for background uploading service.");
 		Log.i(TAG, "Attempting to upload: " + uri);
 		QueueManager.setProcedureUploadStatus(context, uri, QueueManager.UPLOAD_STATUS_IN_PROGRESS);
@@ -423,7 +429,8 @@ public class MDSInterface2 {
 			answersJson = cursor.getString(2);
 			finished = cursor.getInt(3) != 0;
 			savedProcedureGUID = cursor.getString(cursor.getColumnIndex(Encounters.Contract.UUID));
-			savedProcedureUploaded = true; //cursor.getInt(5) != 0;
+			savedProcedureUploaded = cursor.getInt(5) != 0;
+			//savedProcedureUploaded = true;
 			observerUUID = cursor.getString(
 				cursor.getColumnIndex(Encounters.Contract.OBSERVER));
 			subjectUUID = cursor.getString(
@@ -614,9 +621,7 @@ public class MDSInterface2 {
 		Log.i(TAG, "Posted responses, now sending " + totalBinaries
 				+ " binaries.");
 
-        // HARD-CODE
-        savedProcedureGUID = "eccaf997-1abc-486c-91f2-9f2174579818";
-
+		//savedProcedureGUID = "eccaf997-1abc-486c-91f2-9f2174579818";
 		// lookup starting packet size
 		int newPacketSize;
 		try {
@@ -673,7 +678,32 @@ public class MDSInterface2 {
 					// it when we upload it.
 				}
 				
-				
+				//try if type == ElementType.PICTURE
+				// link to our java code and upload
+
+				if(type == ElementType.PICTURE) {
+					Log.i(TAG, "INSIDE UPLOADING PICTURE PROCESS");
+					BufferedInputStream dataStream = new BufferedInputStream(context.getContentResolver().openInputStream(binUri));
+					int fileSize = dataStream.available();
+
+					//context
+
+
+					ChecksumResultsDAO cr = NetworkUtil.getChecksumResult(binUri, fileSize, savedProcedureGUID, e.id);
+					RsyncAnalyser analyser = new RsyncAnalyser();
+					analyser.update(dataStream);
+
+					List<Long> rolling = cr.getRolling();
+					List<String> md5 = cr.getMd5();
+					List<Object> instructions = analyser.generate(rolling, md5, 1024, 1024);
+
+					//Question: i don't see where does not resend data if failed...
+					NetworkUtil.send(instructions, savedProcedureGUID, e.id, binaryId, type, fileSize);
+
+					break;
+				}
+
+
 				int binaryPostCount = 0;
 				while(binaryPostCount < MAXBINARY_POST_ATTEMPT){
 					binaryPostCount++;
@@ -711,7 +741,7 @@ public class MDSInterface2 {
 		return true;
 	}
 
-	public static boolean postProcedureToDjangoServer(Uri uri, Context context) throws UnsupportedEncodingException {
+	public static boolean postProcedureToDjangoServer(Uri uri, Context context) throws IOException, NoSuchAlgorithmException {
 
 
 		SharedPreferences preferences = PreferenceManager

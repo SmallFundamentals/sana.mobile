@@ -117,7 +117,7 @@ public class ImageProvider extends ContentProvider {
     	return basePath() + "thumb_" + imageId + ".jpg";
     }
 
-    private static String buildFilenameFromUri(Uri uri) {
+    public static String buildFilenameFromUri(Uri uri) {
     	List<String> segments = uri.getPathSegments();
 
     	// Invalid URI
