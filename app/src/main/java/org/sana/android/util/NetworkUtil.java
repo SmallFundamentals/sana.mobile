@@ -125,30 +125,32 @@ public class NetworkUtil {
     public static void send(List<Object> instructions, String savedProcedureId,
                             String elementId, String binaryGuid, ProcedureElement.ElementType type, int fileSize) throws UnsupportedEncodingException {
         //System.out.println(String.format("-- Sending instructions for '%s' --", fileName));
-        int idx = 0;
         for (int i = 0; i < instructions.size(); i++) {
             if (instructions.get(i) instanceof ArrayList) {
+
                 List<Byte> data = (List<Byte>) instructions.get(i);
                 Byte[] bytes = data.toArray(new Byte[data.size()]);
                 byte[] rawBytes = getRawBytes(bytes);
+                //rounds up
+                int numOfTransmits = (int) Math.ceil(fileSize / 1024);
+                for(int j = 0; j < numOfTransmits -1; j++) {
+                    int start = j * 1024;
+                    int end = ((j+1) * 1024) > fileSize ? fileSize : ((j+1) * 1024);
 
-                System.out.println(String.format("Sending block #%d, size = %d", idx, data.size()));
-                sendBinary(idx, rawBytes, savedProcedureId, elementId, binaryGuid, type, fileSize);
-                idx += (data.size() / 1024);
-            } else {
-                idx++;
+                    sendBinary(rawBytes, savedProcedureId, elementId, binaryGuid, type, start, end, fileSize);
+
+                }
             }
-            System.out.println(idx);
         }
+
     }
 
     /**
      * Send a binary chunk with its index to server
-     * @param index
      * @param bytes
      */
-    public static void sendBinary(int index, byte[] bytes, String savedProcedureId,
-                                  String elementId, String binaryGuid, ProcedureElement.ElementType type, int fileSize) throws UnsupportedEncodingException {
+    public static void sendBinary(byte[] bytes, String savedProcedureId,
+                                  String elementId, String binaryGuid, ProcedureElement.ElementType type, int start, int end, int fileSize) throws UnsupportedEncodingException {
 
         HttpPost post = new HttpPost(UPLOAD_INSTRUCTION_URL);
 
@@ -158,8 +160,8 @@ public class NetworkUtil {
         entity.addPart("binary_guid", new StringBody(binaryGuid));
         entity.addPart("element_type", new StringBody(type.toString()));
         entity.addPart("file_size", new StringBody(Integer.toString(fileSize)));
-        entity.addPart("byte_start", new StringBody(Integer.toString(0)));
-        entity.addPart("byte_end", new StringBody(Integer.toString(fileSize)));
+        entity.addPart("byte_start", new StringBody(Integer.toString(start)));
+        entity.addPart("byte_end", new StringBody(Integer.toString(end)));
         entity.addPart("byte_data", new ByteArrayBody(bytes, type.getFilename()));
 
         //execute
@@ -178,6 +180,8 @@ public class NetworkUtil {
             //Gson gson = new Gson();
             //result = gson.fromJson(jsonString, ChecksumResultsDAO.class);
             int statusCode = httpResponse.getStatusLine().getStatusCode();
+
+
             String responseBody = EntityUtils.toString(httpResponse.getEntity());
             System.out.println(String.format("Status: %d Response: %s", statusCode, responseBody));
         } catch (IOException e1) {
@@ -188,18 +192,6 @@ public class NetworkUtil {
             //        + e.getMessage());
         }
 
-        //HttpEntity entity = builder.build();
-        //post.setEntity(entity);
-        /*
-        try {
-            HttpResponse response = httpClient.execute(post);
-            int statusCode = response.getStatusLine().getStatusCode();
-            String responseBody = EntityUtils.toString(response.getEntity());
-            System.out.println(String.format("Status: %d Response: %s", statusCode, responseBody));
-        } catch (IOException ie) {
-            System.out.println(ie);
-        }
-        */
     }
 
     private static byte[] getRawBytes(Byte[] data) {

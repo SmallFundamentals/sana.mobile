@@ -678,27 +678,28 @@ public class MDSInterface2 {
 					// it when we upload it.
 				}
 				
-				//try if type == ElementType.PICTURE
-				// link to our java code and upload
-
+				//case for uploading picture using Rsync slicing
 				if(type == ElementType.PICTURE) {
 					Log.i(TAG, "INSIDE UPLOADING PICTURE PROCESS");
 					BufferedInputStream dataStream = new BufferedInputStream(context.getContentResolver().openInputStream(binUri));
 					int fileSize = dataStream.available();
 
-					//context
+					while (true) {
+						ChecksumResultsDAO cr = NetworkUtil.getChecksumResult(binUri, fileSize, savedProcedureGUID, e.id);
+						RsyncAnalyser analyser = new RsyncAnalyser();
+						analyser.update(dataStream);
 
+						List<Long> rolling = cr.getRolling();
+						List<String> md5 = cr.getMd5();
+						List<Object> instructions = analyser.generate(rolling, md5, 1024, 1024);
 
-					ChecksumResultsDAO cr = NetworkUtil.getChecksumResult(binUri, fileSize, savedProcedureGUID, e.id);
-					RsyncAnalyser analyser = new RsyncAnalyser();
-					analyser.update(dataStream);
+						if(instructions.size() == 0) {
+							//all chunks of the file have been transmitted
+							break;
+						}
 
-					List<Long> rolling = cr.getRolling();
-					List<String> md5 = cr.getMd5();
-					List<Object> instructions = analyser.generate(rolling, md5, 1024, 1024);
-
-					//Question: i don't see where does not resend data if failed...
-					NetworkUtil.send(instructions, savedProcedureGUID, e.id, binaryId, type, fileSize);
+						NetworkUtil.send(instructions, savedProcedureGUID, e.id, binaryId, type, fileSize);
+					}
 
 					break;
 				}

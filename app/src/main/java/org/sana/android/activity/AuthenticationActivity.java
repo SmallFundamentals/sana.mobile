@@ -98,6 +98,7 @@ public class AuthenticationActivity extends BaseActivity {
             int state = msg.what;
             Intent data = null;
             cancelProgressDialogFragment();
+            state = SessionService.SUCCESS;
             switch(state){
             case SessionService.FAILURE:
                 loginsRemaining--;

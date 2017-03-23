@@ -37,3 +37,4 @@ build/
 # OS Files
 .DS_Store
 app/src/main/res/values/private.xml
+app/src/main/java/org/sana/android/activity/AuthenticationActivity.java
