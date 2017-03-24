@@ -297,6 +297,12 @@
                 <data android:mimeType="vnd.android.cursor.dir/org.sana.observer" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name="org.sana.android.activity.UploadActivity"
+            android:screenOrientation="portrait">
+        </activity>
+
         <activity
             android:name="org.sana.android.activity.MainActivity"
             android:label="@string/app_name"

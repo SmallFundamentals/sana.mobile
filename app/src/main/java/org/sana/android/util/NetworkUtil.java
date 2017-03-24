@@ -3,7 +3,10 @@ package org.sana.android.util;
 /**
  * Created by Errin on 12/03/2017.
  */
+import android.content.Context;
+import android.content.Intent;
 import android.net.Uri;
+import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
 
 import com.google.gson.Gson;
@@ -34,7 +37,10 @@ import org.sana.net.http.HttpTaskFactory;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 import static android.R.attr.start;
@@ -54,21 +60,17 @@ public class NetworkUtil {
     public static ChecksumResultsDAO getChecksumResult(Uri binUri, int fileSize, String savedProcedureId, String elementId) throws FileNotFoundException, UnsupportedEncodingException {
         ImageProvider imageProvider = new ImageProvider();
         String fileName = imageProvider.buildFilenameFromUri(binUri);
-        return getChecksumResult(fileName, fileName, fileSize, savedProcedureId, elementId);
+        return getChecksumResult(fileSize, savedProcedureId, elementId);
     }
 
     /**
      * Get rolling and md5 checksum from the server
-     * @param localFileName
-     * @param remoteFileName
      * @return ChecksumResultsDAO
      */
-    public static ChecksumResultsDAO getChecksumResult(String localFileName, String remoteFileName, int fileSize, String savedProcedureId, String elementId)
+    public static ChecksumResultsDAO getChecksumResult(int fileSize, String savedProcedureId, String elementId)
             throws FileNotFoundException, UnsupportedEncodingException {
 
-        //HttpClient httpClient = HttpClientBuilder.create().build();
         HttpPost post = new HttpPost(GET_CHECKSUMS_URL);
-
 
         MultipartEntity entity = new MultipartEntity();
         entity.addPart("procedure_guid", new StringBody(savedProcedureId));
@@ -79,42 +81,24 @@ public class NetworkUtil {
         post.setEntity(entity);
         HttpClient client = HttpTaskFactory.CLIENT_FACTORY.produce();
 
-        //MDSResult postResponse = MDSInterface.doPost(c, mUrl, entity);
         HttpResponse httpResponse = null;
         ChecksumResultsDAO result = null;
 
         try {
 
             httpResponse = client.execute(post);
-            //Log.d(TAG, "postResponses got response code " +  httpResponse.getStatusLine().getStatusCode());
 
-            char buf[] = new char[20560];
             String jsonString = EntityUtils.toString(httpResponse.getEntity());
-            //Log.d(TAG, "Received from MDS:" + responseString.length()+" chars");
             Gson gson = new Gson();
             result = gson.fromJson(jsonString, ChecksumResultsDAO.class);
 
         } catch (IOException e1) {
-            //Log.e(TAG, e1.toString());
             e1.printStackTrace();
         } catch (JsonParseException e) {
-            //Log.e(TAG, "postResponses(): Error parsing MDS JSON response: "
-            //        + e.getMessage());
+            e.printStackTrace();
+
         }
 
-        //List<NameValuePair> params = new ArrayList<>();
-        //params.add(new BasicNameValuePair("name", remoteFileName));
-        //params.add(new BasicNameValuePair("size", String.valueOf(fileSize)));
-
-        //try {
-            //post.setEntity(new UrlEncodedFormEntity(params));
-            //HttpResponse response = httpClient.execute(post);
-            //String jsonString = EntityUtils.toString(response.getEntity());
-            //result = new Gson().fromJson(jsonString, ChecksumResultsDAO.class);
-            //result.setFileName(localFileName);
-        //} catch (IOException ex) {
-        //    System.out.println(ex);
-        //}
         return result;
     }
 
@@ -122,9 +106,8 @@ public class NetworkUtil {
      * Extract data from instructions and send it via POST request.
      * @param instructions
      */
-    public static void send(List<Object> instructions, String savedProcedureId,
+    public static void send(Context context, List<Object> instructions, String savedProcedureId,
                             String elementId, String binaryGuid, ProcedureElement.ElementType type, int fileSize) throws UnsupportedEncodingException {
-        //System.out.println(String.format("-- Sending instructions for '%s' --", fileName));
         for (int i = 0; i < instructions.size(); i++) {
             if (instructions.get(i) instanceof ArrayList) {
 
@@ -132,12 +115,24 @@ public class NetworkUtil {
                 Byte[] bytes = data.toArray(new Byte[data.size()]);
                 byte[] rawBytes = getRawBytes(bytes);
                 //rounds up
-                int numOfTransmits = (int) Math.ceil(fileSize / 1024);
+                int numOfTransmits = (fileSize + 1024 - 1) / 1024;
+                int percentageIncrease = (100 + numOfTransmits - 1) / numOfTransmits;
                 for(int j = 0; j < numOfTransmits -1; j++) {
                     int start = j * 1024;
                     int end = ((j+1) * 1024) > fileSize ? fileSize : ((j+1) * 1024);
 
-                    sendBinary(rawBytes, savedProcedureId, elementId, binaryGuid, type, start, end, fileSize);
+                    if(sendBinary(rawBytes, savedProcedureId, elementId, binaryGuid, type, start, end, fileSize)) {
+                        //broadcast to update view
+                        int currentPercentage = (int) Math.ceil((j+1)*percentageIncrease);
+                        if(currentPercentage > 100) {
+                            currentPercentage = 100;
+                        }
+                        Intent uploadInfo = new Intent("Progress_Updating");
+                        uploadInfo.putExtra("percentage", currentPercentage);
+
+                        LocalBroadcastManager.getInstance(
+                                context).sendBroadcast(uploadInfo);
+                    }
 
                 }
             }
@@ -149,7 +144,7 @@ public class NetworkUtil {
      * Send a binary chunk with its index to server
      * @param bytes
      */
-    public static void sendBinary(byte[] bytes, String savedProcedureId,
+    public static boolean sendBinary(byte[] bytes, String savedProcedureId,
                                   String elementId, String binaryGuid, ProcedureElement.ElementType type, int start, int end, int fileSize) throws UnsupportedEncodingException {
 
         HttpPost post = new HttpPost(UPLOAD_INSTRUCTION_URL);
@@ -184,6 +179,10 @@ public class NetworkUtil {
 
             String responseBody = EntityUtils.toString(httpResponse.getEntity());
             System.out.println(String.format("Status: %d Response: %s", statusCode, responseBody));
+
+            if(statusCode == 200) {
+                return true;
+            } else return false;
         } catch (IOException e1) {
             //Log.e(TAG, e1.toString());
             e1.printStackTrace();
@@ -191,7 +190,7 @@ public class NetworkUtil {
             //Log.e(TAG, "postResponses(): Error parsing MDS JSON response: "
             //        + e.getMessage());
         }
-
+        return false;
     }
 
     private static byte[] getRawBytes(Byte[] data) {

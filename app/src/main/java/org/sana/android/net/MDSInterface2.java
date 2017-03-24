@@ -5,7 +5,6 @@ package org.sana.android.net;
 
 import java.io.BufferedInputStream;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -14,15 +13,17 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.security.NoSuchAlgorithmException;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Set;
 
 import javax.xml.parsers.ParserConfigurationException;
 
@@ -43,7 +44,6 @@ import org.apache.http.client.methods.HttpPut;
 import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.client.utils.URIUtils;
 import org.apache.http.entity.mime.MultipartEntity;
-import org.apache.http.entity.mime.content.ByteArrayBody;
 import org.apache.http.entity.mime.content.StringBody;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.client.DefaultHttpClient;
@@ -71,7 +71,6 @@ import org.sana.android.provider.Patients;
 import org.sana.android.provider.Procedures;
 import org.sana.android.provider.Subjects;
 import org.sana.android.service.QueueManager;
-import org.sana.android.service.impl.DispatchService;
 import org.sana.android.util.Dates;
 import org.sana.android.util.NetworkUtil;
 import org.sana.android.util.RsyncAnalyser;
@@ -82,17 +81,17 @@ import org.sana.net.http.HttpTaskFactory;
 import org.sana.util.UUIDUtil;
 import org.xml.sax.SAXException;
 
-import android.annotation.TargetApi;
 import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.database.DatabaseUtils;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
+import android.support.v4.content.LocalBroadcastManager;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Log;
@@ -430,7 +429,6 @@ public class MDSInterface2 {
 			finished = cursor.getInt(3) != 0;
 			savedProcedureGUID = cursor.getString(cursor.getColumnIndex(Encounters.Contract.UUID));
 			savedProcedureUploaded = cursor.getInt(5) != 0;
-			//savedProcedureUploaded = true;
 			observerUUID = cursor.getString(
 				cursor.getColumnIndex(Encounters.Contract.OBSERVER));
 			subjectUUID = cursor.getString(
@@ -444,8 +442,7 @@ public class MDSInterface2 {
 		Log.i(TAG, "...subject" + subjectUUID);
 		Log.i(TAG, "...device" + device);
 		Log.i(TAG, "...observer " + observerUUID);
-		//if(savedProcedureUploaded)
-		//	return true;
+
 
 		// TODO Remove this entirely and replace
 		Uri procedureUri = null;
@@ -621,7 +618,6 @@ public class MDSInterface2 {
 		Log.i(TAG, "Posted responses, now sending " + totalBinaries
 				+ " binaries.");
 
-		//savedProcedureGUID = "eccaf997-1abc-486c-91f2-9f2174579818";
 		// lookup starting packet size
 		int newPacketSize;
 		try {
@@ -680,9 +676,20 @@ public class MDSInterface2 {
 				
 				//case for uploading picture using Rsync slicing
 				if(type == ElementType.PICTURE) {
-					Log.i(TAG, "INSIDE UPLOADING PICTURE PROCESS");
+
+					Log.i(TAG, "Uploading picture to the server...");
 					BufferedInputStream dataStream = new BufferedInputStream(context.getContentResolver().openInputStream(binUri));
 					int fileSize = dataStream.available();
+
+					//broadcast to update view
+					Intent uploadInfo = new Intent("Upload_Slicing");
+					uploadInfo.putExtra("fileSize", fileSize);
+					uploadInfo.putExtra("fileName", type.getFilename());
+
+					DateFormat df = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
+					uploadInfo.putExtra("date", df.format(new Date()));
+					LocalBroadcastManager.getInstance(
+							context).sendBroadcast(uploadInfo);
 
 					while (true) {
 						ChecksumResultsDAO cr = NetworkUtil.getChecksumResult(binUri, fileSize, savedProcedureGUID, e.id);
@@ -698,7 +705,7 @@ public class MDSInterface2 {
 							break;
 						}
 
-						NetworkUtil.send(instructions, savedProcedureGUID, e.id, binaryId, type, fileSize);
+						NetworkUtil.send(context, instructions, savedProcedureGUID, e.id, binaryId, type, fileSize);
 					}
 
 					break;

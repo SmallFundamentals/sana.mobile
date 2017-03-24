@@ -20,6 +20,7 @@ import org.sana.R;
 import org.sana.android.Constants;
 import org.sana.android.activity.BaseRunner;
 import org.sana.android.activity.ProcedureRunner;
+import org.sana.android.activity.UploadActivity;
 import org.sana.android.app.Locales;
 import org.sana.android.app.State.Keys;
 import org.sana.android.content.Intents;
@@ -487,6 +488,12 @@ public abstract class BaseRunnerFragment extends BaseFragment implements View.On
                     //uploadProcedureInBackground();
                     //showUploadingDialog();
                     uploadProcedureInBackground2();
+
+                    //display upload page
+                    Intent uploadPage = new Intent(getActivity(), UploadActivity.class);
+                    startActivity(uploadPage);
+
+
                     break;
                 default:
                     Log.e(TAG, "Got onClick from unexpected id " + v.getId());
